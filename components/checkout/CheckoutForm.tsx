@@ -471,7 +471,7 @@ export default function CheckoutForm({ cart, onSubmit, processing }: CheckoutFor
           <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
             <p className="text-sm text-blue-800">
               <strong>Note:</strong> This is a demo checkout. No actual payment will be processed. 
-              Your order will be marked as "Pending Payment" for demonstration purposes.
+              Your order will be marked as "Pending Payment\" for demonstration purposes.
             </p>
           </div>
         </CardContent>
