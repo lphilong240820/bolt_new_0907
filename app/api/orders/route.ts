@@ -72,12 +72,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!shippingAddress || !paymentMethod) {
+    if (!shippingAddress) {
       return NextResponse.json(
-        { error: 'Shipping address and payment method are required' },
+        { error: 'Shipping address is required' },
         { status: 400 }
       );
     }
+
+    // Ensure paymentMethod has a default value
+    const finalPaymentMethod = paymentMethod || 'credit_card';
 
     // Validate product availability and stock
     for (const item of items) {
@@ -116,7 +119,7 @@ export async function POST(request: NextRequest) {
           total: parseFloat(total.toString()),
           shippingAddress,
           billingAddress,
-          paymentMethod,
+          paymentMethod: finalPaymentMethod,
           notes: notes || null,
           orderItems: {
             create: items.map((item: any) => ({

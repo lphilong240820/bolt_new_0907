@@ -144,7 +144,7 @@ export default function OrderConfirmationPage() {
                   <div>
                     <p className="text-sm text-gray-600">Payment Method</p>
                     <p className="font-semibold capitalize">
-                      {order.paymentMethod.replace('_', ' ')}
+                      {order.paymentMethod ? order.paymentMethod.replace('_', ' ') : 'Not specified'}
                     </p>
                   </div>
                 </div>

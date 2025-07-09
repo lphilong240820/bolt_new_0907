@@ -91,7 +91,8 @@ export default function CheckoutPage() {
         router.push(`/order-confirmation/${order.id}`);
       } else {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to create order');
+        console.error('Order creation failed:', errorData);
+        alert(errorData.error || 'Failed to process order. Please try again.');
       }
     } catch (error) {
       console.error('Error creating order:', error);
