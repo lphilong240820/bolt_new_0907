@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
@@ -37,25 +37,43 @@ interface Order {
 
 export default function OrderConfirmationPage() {
   const params = useParams();
-  const { data: session } = useSession();
+  const router = useRouter();
+  const { data: session, status } = useSession();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (params.id) {
+    // Redirect to sign in if not authenticated
+    if (!session && status !== 'loading') {
+      router.push('/auth/signin');
+      return;
+    }
+  }, [session, status, router]);
+
+  useEffect(() => {
+    if (params.id && session) {
       fetchOrder(params.id as string);
     }
-  }, [params.id]);
+  }, [params.id, session]);
 
   const fetchOrder = async (orderId: string) => {
     try {
       const response = await fetch(`/api/orders/${orderId}`);
-      if (response.ok) {
+      
+      if (response.status === 401) {
+        router.push('/auth/signin');
+        return;
+      }
+      
+      if (response.status === 404) {
+        setError('Order not found or you do not have permission to view it');
+      } else if (response.ok) {
         const orderData = await response.json();
         setOrder(orderData);
       } else {
-        setError('Order not found');
+        const errorData = await response.json();
+        setError(errorData.error || 'Failed to load order');
       }
     } catch (error) {
       console.error('Error fetching order:', error);
@@ -65,7 +83,8 @@ export default function OrderConfirmationPage() {
     }
   };
 
-  if (loading) {
+  // Show loading while checking authentication or fetching order
+  if (status === 'loading' || loading) {
     return (
       <div className="min-h-screen bg-white">
         <Header />
@@ -81,6 +100,11 @@ export default function OrderConfirmationPage() {
         <Footer />
       </div>
     );
+  }
+
+  // Redirect if not authenticated (this should be handled by useEffect above)
+  if (!session) {
+    return null;
   }
 
   if (error || !order) {
@@ -144,7 +168,7 @@ export default function OrderConfirmationPage() {
                   <div>
                     <p className="text-sm text-gray-600">Payment Method</p>
                     <p className="font-semibold capitalize">
-                      {order.paymentMethod ? order.paymentMethod.replace('_', ' ') : 'Not specified'}
+                      {order.paymentMethod ? order.paymentMethod.replace(/_/g, ' ') : 'Not specified'}
                     </p>
                   </div>
                 </div>
@@ -193,22 +217,26 @@ export default function OrderConfirmationPage() {
                 <CardTitle>Shipping Address</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-sm">
-                  <p className="font-medium">
-                    {order.shippingAddress.firstName} {order.shippingAddress.lastName}
-                  </p>
-                  <p>{order.shippingAddress.address1}</p>
-                  {order.shippingAddress.address2 && (
-                    <p>{order.shippingAddress.address2}</p>
-                  )}
-                  <p>
-                    {order.shippingAddress.city}, {order.shippingAddress.state} {order.shippingAddress.postalCode}
-                  </p>
-                  <p>{order.shippingAddress.country}</p>
-                  {order.shippingAddress.phone && (
-                    <p className="mt-2">Phone: {order.shippingAddress.phone}</p>
-                  )}
-                </div>
+                {order.shippingAddress ? (
+                  <div className="text-sm">
+                    <p className="font-medium">
+                      {order.shippingAddress.firstName} {order.shippingAddress.lastName}
+                    </p>
+                    <p>{order.shippingAddress.address1}</p>
+                    {order.shippingAddress.address2 && (
+                      <p>{order.shippingAddress.address2}</p>
+                    )}
+                    <p>
+                      {order.shippingAddress.city}, {order.shippingAddress.state} {order.shippingAddress.postalCode}
+                    </p>
+                    <p>{order.shippingAddress.country}</p>
+                    {order.shippingAddress.phone && (
+                      <p className="mt-2">Phone: {order.shippingAddress.phone}</p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-gray-500">No shipping address available</p>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -285,7 +313,7 @@ export default function OrderConfirmationPage() {
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
               </Link>
-              <Link href="/dashboard/orders" className="block">
+              <Link href="/orders" className="block">
                 <Button variant="outline" className="w-full">
                   View All Orders
                 </Button>

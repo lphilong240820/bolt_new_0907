@@ -71,6 +71,8 @@ export default function CheckoutPage() {
   const handleOrderSubmit = async (orderData: any) => {
     setProcessing(true);
     try {
+      console.log('Submitting order with data:', orderData);
+      
       const response = await fetch('/api/orders', {
         method: 'POST',
         headers: {
@@ -88,15 +90,19 @@ export default function CheckoutPage() {
 
       if (response.ok) {
         const order = await response.json();
+        console.log('Order created successfully:', order);
         router.push(`/order-confirmation/${order.id}`);
       } else {
         const errorData = await response.json();
         console.error('Order creation failed:', errorData);
-        alert(errorData.error || 'Failed to process order. Please try again.');
+        
+        // Show user-friendly error message
+        const errorMessage = errorData.error || 'Failed to process order. Please try again.';
+        alert(errorMessage);
       }
     } catch (error) {
       console.error('Error creating order:', error);
-      alert('Failed to process order. Please try again.');
+      alert('Network error. Please check your connection and try again.');
     } finally {
       setProcessing(false);
     }

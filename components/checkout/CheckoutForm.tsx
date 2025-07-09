@@ -123,6 +123,8 @@ export default function CheckoutForm({ cart, onSubmit, processing }: CheckoutFor
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
+    console.log('Form data before validation:', formData);
+    
     if (!validateForm()) {
       toast({
         title: "Validation Error",
@@ -161,7 +163,7 @@ export default function CheckoutForm({ cart, onSubmit, processing }: CheckoutFor
       country: formData.billingCountry,
     };
 
-    onSubmit({
+    const orderData = {
       shippingAddress,
       billingAddress,
       paymentMethod: formData.paymentMethod,
@@ -170,7 +172,11 @@ export default function CheckoutForm({ cart, onSubmit, processing }: CheckoutFor
       shipping,
       total,
       notes: formData.notes,
-    });
+    };
+
+    console.log('Submitting order data:', orderData);
+
+    onSubmit(orderData);
   };
 
   return (
