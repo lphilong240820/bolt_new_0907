@@ -10,6 +10,7 @@ import { Separator } from '@/components/ui/separator';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Checkbox } from '@/components/ui/checkbox';
 import { CreditCard, Truck, MapPin } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 interface CheckoutFormProps {
   cart: any;
@@ -18,6 +19,7 @@ interface CheckoutFormProps {
 }
 
 export default function CheckoutForm({ cart, onSubmit, processing }: CheckoutFormProps) {
+  const { toast } = useToast();
   const [formData, setFormData] = useState({
     // Shipping Address
     shippingFirstName: '',
@@ -52,17 +54,83 @@ export default function CheckoutForm({ cart, onSubmit, processing }: CheckoutFor
     notes: '',
   });
 
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+    
+    // Clear error when user starts typing
+    if (errors[name]) {
+      setErrors(prev => ({ ...prev, [name]: '' }));
+    }
   };
 
   const handleCheckboxChange = (name: string, checked: boolean) => {
     setFormData(prev => ({ ...prev, [name]: checked }));
   };
 
+  const validateForm = () => {
+    const newErrors: Record<string, string> = {};
+
+    // Required shipping fields
+    const requiredShippingFields = [
+      'shippingFirstName',
+      'shippingLastName', 
+      'shippingEmail',
+      'shippingAddress1',
+      'shippingCity',
+      'shippingState',
+      'shippingPostalCode'
+    ];
+
+    requiredShippingFields.forEach(field => {
+      if (!formData[field as keyof typeof formData]) {
+        const fieldName = field.replace('shipping', '').replace(/([A-Z])/g, ' $1').toLowerCase();
+        newErrors[field] = `${fieldName.charAt(0).toUpperCase() + fieldName.slice(1)} is required`;
+      }
+    });
+
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (formData.shippingEmail && !emailRegex.test(formData.shippingEmail)) {
+      newErrors.shippingEmail = 'Please enter a valid email address';
+    }
+
+    // Billing address validation if different from shipping
+    if (!formData.sameAsShipping) {
+      const requiredBillingFields = [
+        'billingFirstName',
+        'billingLastName',
+        'billingAddress1',
+        'billingCity',
+        'billingState',
+        'billingPostalCode'
+      ];
+
+      requiredBillingFields.forEach(field => {
+        if (!formData[field as keyof typeof formData]) {
+          const fieldName = field.replace('billing', '').replace(/([A-Z])/g, ' $1').toLowerCase();
+          newErrors[field] = `${fieldName.charAt(0).toUpperCase() + fieldName.slice(1)} is required`;
+        }
+      });
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!validateForm()) {
+      toast({
+        title: "Validation Error",
+        description: "Please fill in all required fields correctly.",
+        variant: "destructive",
+      });
+      return;
+    }
     
     const subtotal = cart.total;
     const shipping = subtotal >= 50 ? 0 : 9.99;
@@ -124,8 +192,12 @@ export default function CheckoutForm({ cart, onSubmit, processing }: CheckoutFor
                 name="shippingFirstName"
                 value={formData.shippingFirstName}
                 onChange={handleInputChange}
+                className={errors.shippingFirstName ? 'border-red-500' : ''}
                 required
               />
+              {errors.shippingFirstName && (
+                <p className="text-red-500 text-sm mt-1">{errors.shippingFirstName}</p>
+              )}
             </div>
             <div>
               <Label htmlFor="shippingLastName">Last Name *</Label>
@@ -134,8 +206,12 @@ export default function CheckoutForm({ cart, onSubmit, processing }: CheckoutFor
                 name="shippingLastName"
                 value={formData.shippingLastName}
                 onChange={handleInputChange}
+                className={errors.shippingLastName ? 'border-red-500' : ''}
                 required
               />
+              {errors.shippingLastName && (
+                <p className="text-red-500 text-sm mt-1">{errors.shippingLastName}</p>
+              )}
             </div>
           </div>
 
@@ -148,8 +224,12 @@ export default function CheckoutForm({ cart, onSubmit, processing }: CheckoutFor
                 type="email"
                 value={formData.shippingEmail}
                 onChange={handleInputChange}
+                className={errors.shippingEmail ? 'border-red-500' : ''}
                 required
               />
+              {errors.shippingEmail && (
+                <p className="text-red-500 text-sm mt-1">{errors.shippingEmail}</p>
+              )}
             </div>
             <div>
               <Label htmlFor="shippingPhone">Phone</Label>
@@ -170,8 +250,12 @@ export default function CheckoutForm({ cart, onSubmit, processing }: CheckoutFor
               name="shippingAddress1"
               value={formData.shippingAddress1}
               onChange={handleInputChange}
+              className={errors.shippingAddress1 ? 'border-red-500' : ''}
               required
             />
+            {errors.shippingAddress1 && (
+              <p className="text-red-500 text-sm mt-1">{errors.shippingAddress1}</p>
+            )}
           </div>
 
           <div>
@@ -192,8 +276,12 @@ export default function CheckoutForm({ cart, onSubmit, processing }: CheckoutFor
                 name="shippingCity"
                 value={formData.shippingCity}
                 onChange={handleInputChange}
+                className={errors.shippingCity ? 'border-red-500' : ''}
                 required
               />
+              {errors.shippingCity && (
+                <p className="text-red-500 text-sm mt-1">{errors.shippingCity}</p>
+              )}
             </div>
             <div>
               <Label htmlFor="shippingState">State *</Label>
@@ -202,8 +290,12 @@ export default function CheckoutForm({ cart, onSubmit, processing }: CheckoutFor
                 name="shippingState"
                 value={formData.shippingState}
                 onChange={handleInputChange}
+                className={errors.shippingState ? 'border-red-500' : ''}
                 required
               />
+              {errors.shippingState && (
+                <p className="text-red-500 text-sm mt-1">{errors.shippingState}</p>
+              )}
             </div>
             <div>
               <Label htmlFor="shippingPostalCode">Postal Code *</Label>
@@ -212,8 +304,12 @@ export default function CheckoutForm({ cart, onSubmit, processing }: CheckoutFor
                 name="shippingPostalCode"
                 value={formData.shippingPostalCode}
                 onChange={handleInputChange}
+                className={errors.shippingPostalCode ? 'border-red-500' : ''}
                 required
               />
+              {errors.shippingPostalCode && (
+                <p className="text-red-500 text-sm mt-1">{errors.shippingPostalCode}</p>
+              )}
             </div>
           </div>
         </CardContent>
@@ -248,8 +344,12 @@ export default function CheckoutForm({ cart, onSubmit, processing }: CheckoutFor
                     name="billingFirstName"
                     value={formData.billingFirstName}
                     onChange={handleInputChange}
+                    className={errors.billingFirstName ? 'border-red-500' : ''}
                     required={!formData.sameAsShipping}
                   />
+                  {errors.billingFirstName && (
+                    <p className="text-red-500 text-sm mt-1">{errors.billingFirstName}</p>
+                  )}
                 </div>
                 <div>
                   <Label htmlFor="billingLastName">Last Name *</Label>
@@ -258,8 +358,12 @@ export default function CheckoutForm({ cart, onSubmit, processing }: CheckoutFor
                     name="billingLastName"
                     value={formData.billingLastName}
                     onChange={handleInputChange}
+                    className={errors.billingLastName ? 'border-red-500' : ''}
                     required={!formData.sameAsShipping}
                   />
+                  {errors.billingLastName && (
+                    <p className="text-red-500 text-sm mt-1">{errors.billingLastName}</p>
+                  )}
                 </div>
               </div>
 
@@ -270,8 +374,12 @@ export default function CheckoutForm({ cart, onSubmit, processing }: CheckoutFor
                   name="billingAddress1"
                   value={formData.billingAddress1}
                   onChange={handleInputChange}
+                  className={errors.billingAddress1 ? 'border-red-500' : ''}
                   required={!formData.sameAsShipping}
                 />
+                {errors.billingAddress1 && (
+                  <p className="text-red-500 text-sm mt-1">{errors.billingAddress1}</p>
+                )}
               </div>
 
               <div>
@@ -292,8 +400,12 @@ export default function CheckoutForm({ cart, onSubmit, processing }: CheckoutFor
                     name="billingCity"
                     value={formData.billingCity}
                     onChange={handleInputChange}
+                    className={errors.billingCity ? 'border-red-500' : ''}
                     required={!formData.sameAsShipping}
                   />
+                  {errors.billingCity && (
+                    <p className="text-red-500 text-sm mt-1">{errors.billingCity}</p>
+                  )}
                 </div>
                 <div>
                   <Label htmlFor="billingState">State *</Label>
@@ -302,8 +414,12 @@ export default function CheckoutForm({ cart, onSubmit, processing }: CheckoutFor
                     name="billingState"
                     value={formData.billingState}
                     onChange={handleInputChange}
+                    className={errors.billingState ? 'border-red-500' : ''}
                     required={!formData.sameAsShipping}
                   />
+                  {errors.billingState && (
+                    <p className="text-red-500 text-sm mt-1">{errors.billingState}</p>
+                  )}
                 </div>
                 <div>
                   <Label htmlFor="billingPostalCode">Postal Code *</Label>
@@ -312,8 +428,12 @@ export default function CheckoutForm({ cart, onSubmit, processing }: CheckoutFor
                     name="billingPostalCode"
                     value={formData.billingPostalCode}
                     onChange={handleInputChange}
+                    className={errors.billingPostalCode ? 'border-red-500' : ''}
                     required={!formData.sameAsShipping}
                   />
+                  {errors.billingPostalCode && (
+                    <p className="text-red-500 text-sm mt-1">{errors.billingPostalCode}</p>
+                  )}
                 </div>
               </div>
             </>
@@ -351,7 +471,7 @@ export default function CheckoutForm({ cart, onSubmit, processing }: CheckoutFor
           <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
             <p className="text-sm text-blue-800">
               <strong>Note:</strong> This is a demo checkout. No actual payment will be processed. 
-              Your order will be marked as "Pending Payment\" for demonstration purposes.
+              Your order will be marked as "Pending Payment" for demonstration purposes.
             </p>
           </div>
         </CardContent>
