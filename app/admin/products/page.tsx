@@ -101,6 +101,7 @@ export default function AdminProductsPage() {
   }, []);
 
   const fetchProducts = async () => {
+    setLoading(true);
     try {
       const params = new URLSearchParams({
         page: pagination.page.toString(),
@@ -131,7 +132,12 @@ export default function AdminProductsPage() {
   };
 
   const handlePageChange = (page: number) => {
+    // For pagination, we want to scroll to top
     setPagination(prev => ({ ...prev, page }));
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth'
+    });
   };
   const fetchCategories = async () => {
     try {
@@ -145,6 +151,9 @@ export default function AdminProductsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Store current scroll position
+    const scrollPosition = window.scrollY;
     
     try {
       const url = editingProduct ? `/api/products/${editingProduct.id}` : '/api/products';
@@ -171,7 +180,17 @@ export default function AdminProductsPage() {
         });
         setIsDialogOpen(false);
         resetForm();
-        fetchProducts();
+        
+        // Fetch products and restore scroll position
+        await fetchProducts();
+        
+        // Restore scroll position after a brief delay to ensure DOM is updated
+        setTimeout(() => {
+          window.scrollTo({
+            top: scrollPosition,
+            behavior: 'smooth'
+          });
+        }, 100);
       } else {
         const errorData = await response.json();
         toast({
@@ -190,6 +209,9 @@ export default function AdminProductsPage() {
   };
 
   const handleEdit = (product: Product) => {
+    // Store current scroll position when opening edit dialog
+    const scrollPosition = window.scrollY;
+    
     setEditingProduct(product);
     setFormData({
       name: product.name,
@@ -204,10 +226,16 @@ export default function AdminProductsPage() {
       images: product.images.length > 0 ? product.images : [''],
     });
     setIsDialogOpen(true);
+    
+    // Store scroll position in a data attribute for later use
+    document.body.setAttribute('data-scroll-position', scrollPosition.toString());
   };
 
   const handleDelete = async (productId: string) => {
     if (!confirm('Are you sure you want to delete this product? This action cannot be undone and will remove all related data (reviews, cart items, etc.).')) return;
+
+    // Store current scroll position
+    const scrollPosition = window.scrollY;
 
     try {
       const response = await fetch(`/api/products/${productId}`, {
@@ -221,7 +249,17 @@ export default function AdminProductsPage() {
           title: "Success",
           description: data.message || "Product deleted successfully",
         });
-        fetchProducts();
+        
+        // Fetch products and restore scroll position
+        await fetchProducts();
+        
+        // Restore scroll position after a brief delay
+        setTimeout(() => {
+          window.scrollTo({
+            top: scrollPosition,
+            behavior: 'smooth'
+          });
+        }, 100);
       } else {
         toast({
           title: "Error",
@@ -240,6 +278,9 @@ export default function AdminProductsPage() {
   };
 
   const resetForm = () => {
+    // Clear stored scroll position when resetting form
+    document.body.removeAttribute('data-scroll-position');
+    
     setFormData({
       name: '',
       description: '',
@@ -428,8 +469,8 @@ export default function AdminProductsPage() {
                 <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                   Cancel
                 </Button>
-                <Button type="submit">
-                  {editingProduct ? 'Update Product' : 'Create Product'}
+                <Button type="submit" disabled={loading}>
+                  {loading ? 'Saving...' : (editingProduct ? 'Update Product' : 'Create Product')}
                 </Button>
               </DialogFooter>
             </form>
