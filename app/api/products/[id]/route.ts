@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
 interface RouteParams {
@@ -94,15 +96,78 @@ export async function DELETE(
   { params }: RouteParams
 ) {
   try {
+    const session = await getServerSession(authOptions);
+    
+    if (!session?.user?.id || (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN')) {
+      return NextResponse.json(
+        { error: 'Unauthorized - Admin access required' },
+        { status: 401 }
+      );
+    }
+
     const { id } = await params;
 
-    await prisma.product.delete({
+    // Check if product exists
+    const existingProduct = await prisma.product.findUnique({
       where: { id },
+    });
+
+    if (!existingProduct) {
+      return NextResponse.json(
+        { error: 'Product not found' },
+        { status: 404 }
+      );
+    }
+
+    // Check if product has any orders (prevent deletion if it has orders)
+    const orderItems = await prisma.orderItem.findFirst({
+      where: { productId: id },
+    });
+
+    if (orderItems) {
+      return NextResponse.json(
+        { error: 'Cannot delete product that has been ordered. Consider marking it as inactive instead.' },
+        { status: 400 }
+      );
+    }
+
+    // Delete related data first (reviews, cart items, wishlist items)
+    await prisma.$transaction(async (tx) => {
+      // Delete reviews
+      await tx.review.deleteMany({
+        where: { productId: id },
+      });
+
+      // Delete cart items
+      await tx.cartItem.deleteMany({
+        where: { productId: id },
+      });
+
+      // Delete wishlist items
+      await tx.wishlistItem.deleteMany({
+        where: { productId: id },
+      });
+
+      // Finally delete the product
+      await tx.product.delete({
+        where: { id },
+      });
     });
 
     return NextResponse.json({ message: 'Product deleted successfully' });
   } catch (error) {
     console.error('Error deleting product:', error);
+    
+    // Handle specific Prisma errors
+    if (error instanceof Error) {
+      if (error.message.includes('Foreign key constraint')) {
+        return NextResponse.json(
+          { error: 'Cannot delete product due to existing references. Please remove all related data first.' },
+          { status: 400 }
+        );
+      }
+    }
+    
     return NextResponse.json(
       { error: 'Failed to delete product' },
       { status: 500 }

@@ -207,27 +207,30 @@ export default function AdminProductsPage() {
   };
 
   const handleDelete = async (productId: string) => {
-    if (!confirm('Are you sure you want to delete this product?')) return;
+    if (!confirm('Are you sure you want to delete this product? This action cannot be undone and will remove all related data (reviews, cart items, etc.).')) return;
 
     try {
       const response = await fetch(`/api/products/${productId}`, {
         method: 'DELETE',
       });
 
+      const data = await response.json();
+
       if (response.ok) {
         toast({
           title: "Success",
-          description: "Product deleted successfully",
+          description: data.message || "Product deleted successfully",
         });
         fetchProducts();
       } else {
         toast({
           title: "Error",
-          description: "Failed to delete product",
+          description: data.error || "Failed to delete product",
           variant: "destructive",
         });
       }
     } catch (error) {
+      console.error('Delete error:', error);
       toast({
         title: "Error",
         description: "An unexpected error occurred",
