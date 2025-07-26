@@ -258,7 +258,38 @@ async function main() {
     }
   });
 
-  // Create 200 products with proper images
+  // Get existing products to avoid SKU conflicts
+  const existingProducts = await prisma.product.findMany({
+    select: { sku: true, slug: true }
+  });
+  const existingSKUs = new Set(existingProducts.map(p => p.sku));
+  const existingSlugs = new Set(existingProducts.map(p => p.slug));
+
+  // Generate unique SKU
+  const generateUniqueSKU = (brand: string, index: number): string => {
+    let sku = `${brand.substring(0, 3).toUpperCase()}-${String(index).padStart(4, '0')}`;
+    let counter = 1;
+    while (existingSKUs.has(sku)) {
+      sku = `${brand.substring(0, 3).toUpperCase()}-${String(index + counter * 1000).padStart(4, '0')}`;
+      counter++;
+    }
+    existingSKUs.add(sku);
+    return sku;
+  };
+
+  // Generate unique slug
+  const generateUniqueSlug = (brand: string, templateName: string, color: string, index: number): string => {
+    let slug = `${brand.toLowerCase()}-${templateName.toLowerCase().replace(/\s+/g, '-')}-${color.toLowerCase()}-${index}`;
+    let counter = 1;
+    while (existingSlugs.has(slug)) {
+      slug = `${brand.toLowerCase()}-${templateName.toLowerCase().replace(/\s+/g, '-')}-${color.toLowerCase()}-${index}-${counter}`;
+      counter++;
+    }
+    existingSlugs.add(slug);
+    return slug;
+  };
+
+  // Create 200 products with proper images and unique SKUs
   const products = [];
   for (let i = 1; i <= 200; i++) {
     const category = categories[Math.floor(Math.random() * categories.length)];
@@ -271,13 +302,16 @@ async function main() {
     const hasDiscount = Math.random() > 0.7; // 30% chance of discount
     const comparePrice = hasDiscount ? basePrice + Math.floor(Math.random() * 100) + 20 : null;
     
+    const uniqueSKU = generateUniqueSKU(brand, i);
+    const uniqueSlug = generateUniqueSlug(brand, template.name, color, i);
+    
     const product = {
       name: `${brand} ${template.name} - ${color}`,
-      slug: `${brand.toLowerCase()}-${template.name.toLowerCase().replace(/\s+/g, '-')}-${color.toLowerCase()}-${i}`,
+      slug: uniqueSlug,
       description: `${template.desc}. Premium quality from ${brand} in ${color} color. Perfect for daily use with excellent durability and performance.`,
       price: basePrice,
       comparePrice,
-      sku: `${brand.substring(0, 3).toUpperCase()}-${String(i).padStart(4, '0')}`,
+      sku: uniqueSKU,
       stock: Math.floor(Math.random() * 100) + 1, // 1-100 stock
       images: template.images, // Use the specific images for this product type
       categoryId: category.id,
@@ -288,115 +322,146 @@ async function main() {
     products.push(product);
   }
 
-  // Insert products in batches
+  // Insert products in batches with better error handling
+  let createdCount = 0;
   for (const product of products) {
-    await prisma.product.upsert({
-      where: { slug: product.slug },
-      update: {},
-      create: product,
-    });
+    try {
+      await prisma.product.upsert({
+        where: { slug: product.slug },
+        update: {
+          name: product.name,
+          description: product.description,
+          price: product.price,
+          comparePrice: product.comparePrice,
+          stock: product.stock,
+          images: product.images,
+          featured: product.featured,
+        },
+        create: product,
+      });
+      createdCount++;
+      
+      // Log progress every 50 products
+      if (createdCount % 50 === 0) {
+        console.log(`🛍️ Created/updated ${createdCount}/${products.length} products...`);
+      }
+    } catch (error) {
+      console.warn(`⚠️ Skipped product ${product.name} due to conflict`);
+      continue;
+    }
   }
 
-  console.log('🛍️ Created 200 products with proper images');
+  console.log(`🛍️ Created/updated ${createdCount} products with proper images`);
 
   // Create some orders for the users
   const allUsers = await prisma.user.findMany({ where: { role: 'CUSTOMER' } });
   const allProducts = await prisma.product.findMany();
 
-  for (let i = 1; i <= 100; i++) {
-    const user = allUsers[Math.floor(Math.random() * allUsers.length)];
-    const orderProducts = [];
-    const numItems = Math.floor(Math.random() * 3) + 1; // 1-3 items per order
-    
-    for (let j = 0; j < numItems; j++) {
-      const product = allProducts[Math.floor(Math.random() * allProducts.length)];
-      const quantity = Math.floor(Math.random() * 3) + 1;
-      orderProducts.push({
-        productId: product.id,
-        quantity,
-        price: product.price,
-      });
+  // Only create orders if we have users and products
+  if (allUsers.length > 0 && allProducts.length > 0) {
+    for (let i = 1; i <= 100; i++) {
+      const user = allUsers[Math.floor(Math.random() * allUsers.length)];
+      const orderProducts = [];
+      const numItems = Math.floor(Math.random() * 3) + 1; // 1-3 items per order
+      
+      for (let j = 0; j < numItems; j++) {
+        const product = allProducts[Math.floor(Math.random() * allProducts.length)];
+        const quantity = Math.floor(Math.random() * 3) + 1;
+        orderProducts.push({
+          productId: product.id,
+          quantity,
+          price: product.price,
+        });
+      }
+
+      const subtotal = orderProducts.reduce((sum, item) => sum + (Number(item.price) * item.quantity), 0);
+      const tax = subtotal * 0.08;
+      const shipping = subtotal > 50 ? 0 : 9.99;
+      const total = subtotal + tax + shipping;
+
+      const statuses = ['PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED'];
+      const status = statuses[Math.floor(Math.random() * statuses.length)];
+
+      try {
+        await prisma.order.create({
+          data: {
+            orderNumber: `ORD-${Date.now()}-${String(i).padStart(4, '0')}`,
+            userId: user.id,
+            status,
+            subtotal,
+            tax,
+            shipping,
+            total,
+            shippingAddress: {
+              firstName: user.name?.split(' ')[0] || 'John',
+              lastName: user.name?.split(' ')[1] || 'Doe',
+              address1: `${Math.floor(Math.random() * 9999)} Main St`,
+              city: 'Sample City',
+              state: 'CA',
+              postalCode: '90210',
+              country: 'US',
+            },
+            billingAddress: {
+              firstName: user.name?.split(' ')[0] || 'John',
+              lastName: user.name?.split(' ')[1] || 'Doe',
+              address1: `${Math.floor(Math.random() * 9999)} Main St`,
+              city: 'Sample City',
+              state: 'CA',
+              postalCode: '90210',
+              country: 'US',
+            },
+            paymentMethod: 'credit_card',
+            orderItems: {
+              create: orderProducts,
+            },
+          },
+        });
+      } catch (error) {
+        console.warn(`⚠️ Skipped order ${i} due to conflict`);
+        continue;
+      }
     }
 
-    const subtotal = orderProducts.reduce((sum, item) => sum + (Number(item.price) * item.quantity), 0);
-    const tax = subtotal * 0.08;
-    const shipping = subtotal > 50 ? 0 : 9.99;
-    const total = subtotal + tax + shipping;
-
-    const statuses = ['PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED'];
-    const status = statuses[Math.floor(Math.random() * statuses.length)];
-
-    await prisma.order.create({
-      data: {
-        orderNumber: `ORD-${Date.now()}-${String(i).padStart(4, '0')}`,
-        userId: user.id,
-        status,
-        subtotal,
-        tax,
-        shipping,
-        total,
-        shippingAddress: {
-          firstName: user.name?.split(' ')[0] || 'John',
-          lastName: user.name?.split(' ')[1] || 'Doe',
-          address1: `${Math.floor(Math.random() * 9999)} Main St`,
-          city: 'Sample City',
-          state: 'CA',
-          postalCode: '90210',
-          country: 'US',
-        },
-        billingAddress: {
-          firstName: user.name?.split(' ')[0] || 'John',
-          lastName: user.name?.split(' ')[1] || 'Doe',
-          address1: `${Math.floor(Math.random() * 9999)} Main St`,
-          city: 'Sample City',
-          state: 'CA',
-          postalCode: '90210',
-          country: 'US',
-        },
-        paymentMethod: 'credit_card',
-        orderItems: {
-          create: orderProducts,
-        },
-      },
-    });
+    console.log('📦 Created orders');
   }
-
-  console.log('📦 Created 100 orders');
 
   // Add some reviews
-  for (let i = 1; i <= 150; i++) {
-    const user = allUsers[Math.floor(Math.random() * allUsers.length)];
-    const product = allProducts[Math.floor(Math.random() * allProducts.length)];
-    const rating = Math.floor(Math.random() * 5) + 1;
-    
-    const comments = [
-      'Great product! Highly recommended.',
-      'Good quality for the price.',
-      'Fast shipping and excellent packaging.',
-      'Exactly as described. Very satisfied.',
-      'Would buy again!',
-      'Perfect for my needs.',
-      'Excellent customer service.',
-      'Good value for money.',
-    ];
+  if (allUsers.length > 0 && allProducts.length > 0) {
+    for (let i = 1; i <= 150; i++) {
+      const user = allUsers[Math.floor(Math.random() * allUsers.length)];
+      const product = allProducts[Math.floor(Math.random() * allProducts.length)];
+      const rating = Math.floor(Math.random() * 5) + 1;
+      
+      const comments = [
+        'Great product! Highly recommended.',
+        'Good quality for the price.',
+        'Fast shipping and excellent packaging.',
+        'Exactly as described. Very satisfied.',
+        'Would buy again!',
+        'Perfect for my needs.',
+        'Excellent customer service.',
+        'Good value for money.',
+      ];
 
-    try {
-      await prisma.review.create({
-        data: {
-          userId: user.id,
-          productId: product.id,
-          rating,
-          comment: comments[Math.floor(Math.random() * comments.length)],
-          verified: Math.random() > 0.3, // 70% verified
-        },
-      });
-    } catch (error) {
-      // Skip if review already exists for this user-product combination
-      continue;
+      try {
+        await prisma.review.create({
+          data: {
+            userId: user.id,
+            productId: product.id,
+            rating,
+            comment: comments[Math.floor(Math.random() * comments.length)],
+            verified: Math.random() > 0.3, // 70% verified
+          },
+        });
+      } catch (error) {
+        // Skip if review already exists for this user-product combination
+        continue;
+      }
     }
+
+    console.log('⭐ Created reviews');
   }
 
-  console.log('⭐ Created reviews');
   console.log('✅ Bulk data insertion completed!');
 }
 
